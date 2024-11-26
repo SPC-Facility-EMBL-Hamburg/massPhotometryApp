@@ -10,7 +10,7 @@ source("server_files/plot_functions.R")
 
 function(input, output, session) {
   
-  welcomeMessage() # helpers.R
+  welcome_message()
 
   refeynCalib <- RefeynCalib()
 
