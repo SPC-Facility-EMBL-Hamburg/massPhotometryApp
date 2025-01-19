@@ -9,8 +9,6 @@ source("server_files/plot_functions.R")
 ### End of variables to change
 
 function(input, output, session) {
-  
-  welcome_message()
 
   refeynCalib <- RefeynCalib()
 

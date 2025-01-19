@@ -18,7 +18,10 @@ shinyUI(dashboardPage(title = paste0(appName),
       ),
   
   dashboardBody(theme_grey_light,
-#    tags$head(includeHTML(("ui_files/google-analytics.html"))),                
+
+    includeHTML("www/banner.html"),
+    includeScript("www/banner.js"),
+
     tabItems(
       tabItem(tabName = "menu_input",
         fluidRow(
