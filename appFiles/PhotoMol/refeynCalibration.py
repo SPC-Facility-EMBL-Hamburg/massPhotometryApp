@@ -18,8 +18,8 @@ class RefeynCalib:
         self.fn = filename
         # Load data
         data = h5py.File(self.fn, 'r')
-        
-        self.contrasts  = np.array(data['contrasts']).squeeze()
+
+        self.contrasts  = np.array(data['contrasts'][:]).squeeze()
         self.n_binding  = np.sum(self.contrasts<0)
         self.create_histo()
         self.findInitialPeaks()
@@ -30,7 +30,7 @@ class RefeynCalib:
         self.fn = filename
         
         data = pd.read_csv(filename)
-        
+
         contrasts  = np.array(data['contrasts']).squeeze()
         self.contrasts = contrasts[~np.isnan(contrasts)]
         self.n_binding  = np.sum(self.contrasts<0)

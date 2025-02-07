@@ -32,12 +32,12 @@ class Refeyn:
         # only one dataset
         if 'contrasts' in data_keys:
 
-            contrasts       = np.array(data['contrasts']).squeeze()
+            contrasts       = np.array(data['contrasts'][:]).squeeze()
             self.contrasts  = contrasts[~np.isnan(contrasts)]
 
         if 'masses_kDa' in data_keys:
 
-            masses_kDa      = np.array(data['masses_kDa']).squeeze()
+            masses_kDa      = np.array(data['masses_kDa'][:]).squeeze()
             self.masses_kDa = masses_kDa 
             self.create_binding_events()
 

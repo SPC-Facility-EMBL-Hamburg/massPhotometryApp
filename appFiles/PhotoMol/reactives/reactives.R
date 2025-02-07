@@ -139,7 +139,11 @@ createPlotsAndTables <- function() {
 
   legends_all     <- c()
 
-  for (model in photoMolModels$models) {
+  models <- photoMolModels$models
+
+  gaussiam_sum_idx <- c()
+
+  for (model in models) {
 
     i <- i + 1
 
@@ -163,30 +167,22 @@ createPlotsAndTables <- function() {
 
     table  <- as.data.frame(model$fit_table)
 
-    legends <- paste0("Mol. #",cnt2+1:length(starting_values))
-    if (length(legends) > 1) {legends <- c(paste0("Gaussian sum (",i,")"),legends)}
+    legends <- paste0("Peak #",cnt2+1:length(starting_values))
+
+    if (length(legends) > 1) {
+      legends <- c(paste0("Gaussian sum (",i,")"),legends)
+      gaussiam_sum_idx <- c(gaussiam_sum_idx,1+length(legends_all))
+    }
 
     cnt2         <- cnt2 + length(starting_values)
     legends_all  <- c(legends_all,legends)
 
-    if (length(photoMolModels$models) >1) table$File <- model$name
+    if (length(models) >1) table$File <- model$name
 
     if (nrow(table) > 0) {
       cnt1 <- cnt1 + 1
       fit_tables[[cnt1]] <- table
     }
-
-  }
-
-  if (length(fit_tables) > 0) {
-
-    fit_table <- do.call(rbind,fit_tables)
-    # Render without the amplitude column
-    output$fittedParams <- renderTable({fit_table[,-5]},digits = 0)
-
-  } else {
-
-    output$fittedParams <- NULL
 
   }
 
@@ -231,6 +227,34 @@ createPlotsAndTables <- function() {
   ) %>% 
       hot_col(col = c(1,2),renderer = myrenderer) %>%
       hot_col(col = 1, width = 150,readOnly = TRUE)})  
+
+  if (length(fit_tables) > 0) {
+
+    fit_table <- do.call(rbind,fit_tables)
+    # Render without the amplitude column
+    output$fittedParams <- renderTable({
+                            req(input$legendInfo)
+
+                            # Remove the 'Amplitudes' column
+                            df <- fit_table[,-5]
+
+                            # Obtain the peak legends
+                            legends <- get_legend_from_rhandTable(input$legendInfo)
+
+                            if (length(gaussiam_sum_idx) > 0) {
+                              df$Legend <- legends[-gaussiam_sum_idx]
+                            } else {
+                              df$Legend <- legends
+                            }
+
+                            return(df)
+                            },digits = 0)
+
+  } else {
+
+    output$fittedParams <- NULL
+
+  }
 
   output$counts_plot <- renderPlotly({
 
