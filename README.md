@@ -1,6 +1,6 @@
 # The PhotoMol app
 
-Last time updated: November 2024
+Last time updated: July 2025
 
 ## Introduction
 
@@ -14,8 +14,6 @@ with known species. Example data is available when running the app.
 ## Getting started
 
 To run the apps locally you need R (tested with version 4.4.1) and Python (tested with version 3.12.3). Then,
-
-1) Install the required R packages (it may take a long time)
 
 1) Install the required R packages (it may take a long time)
 

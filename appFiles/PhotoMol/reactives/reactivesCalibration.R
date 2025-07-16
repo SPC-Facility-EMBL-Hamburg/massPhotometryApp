@@ -189,11 +189,18 @@ output$contrast_plot_calib <- renderPlotly({
   legends <- isolate(get_legend_from_rhandTable(input$legendInfoCalibration))
   colors  <- isolate(get_colors_from_rhandTable(input$legendInfoCalibration))
   sels    <- isolate(get_sel_from_rhandTable(input$legendInfoCalibration))
-  
-  plot <-   plotRefeynFit(list(refeynCalib),input$baseline,input$plot_widthCalibration,
+
+  plot <-   plotRefeynFit(list(refeynCalib),0,input$plot_widthCalibration,
                           input$plot_heightCalibration, input$plot_typeCalibration,
                           input$plot_axis_sizeCalibration,legends,colors,sels,
-                          input$show_contrastLegend,TRUE,FALSE,input$show_contrastPlot)
+                          colorsHist=histogram_palette,
+                          addMassesToLegend=input$show_contrastLegend,
+                          addPercentageToLegend=FALSE,
+                          contrasts=TRUE,
+                          normalize=FALSE,
+                          add_labels=input$show_contrastPlot,
+                          add_percentages=FALSE,
+                          stacked=FALSE)
 
   return(plot)
   # defined in server_files/plot_functions.R
