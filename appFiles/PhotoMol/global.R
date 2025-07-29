@@ -10,6 +10,7 @@ reticulate::use_python(paste0("/home/",user,"/myenv/bin/python"), required = TRU
 
 # developer path
 base_dir <- paste0("/home/",user,"/spc_shiny_servers/massPhotometryApp/appFiles/",appName,"/")
+base_dir <- paste0("/home/",user,"/massPhotometryApp/appFiles/",appName,"/")
 
 # path for the docker user
 if (user == 'shiny') {

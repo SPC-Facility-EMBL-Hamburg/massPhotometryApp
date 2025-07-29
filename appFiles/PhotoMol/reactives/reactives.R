@@ -1,6 +1,9 @@
-reactives <- reactiveValues(data_loaded=FALSE,data_loadedCalibration=FALSE,
-                            calibrationMethod="calibrationFile",
-                            nFiles=0)
+reactives <- reactiveValues(
+    data_loaded=FALSE,
+    data_loadedCalibration=FALSE,
+    calibrationMethod="calibrationFile",
+    calibration_data_fitted=FALSE,
+    nFiles=0)
 
 output$nFiles <- reactive({reactives$nFiles})
 outputOptions(output, "nFiles", suspendWhenHidden = FALSE)

@@ -16,13 +16,19 @@ observeEvent(input$massPhotometryFileCalibration,{
     }
     
     pks_initial <- sapply(refeynCalib$pks_initial, function(x) signif(x*cstFactorForContrast,2))
-    maxNpeaks   <- min(6,length(pks_initial))
+    maxNpeaks   <- min(7,length(pks_initial))
     pks_initial <- pks_initial[1:maxNpeaks]
     
     updateTextInput(session, "starting_valuesContrast", 
                     value = paste(pks_initial,collapse=" "))
     
-    knownMassesInitial <- c(480,148,66,200,120,600,1000,300)[1:maxNpeaks] 
+    knownMassesInitial <- c(480,148,66,200,120,600,1000,300)[1:maxNpeaks]
+
+    # use a different marker if we have more than 4 peaks
+    if (maxNpeaks > 4) {
+      knownMassesInitial <- 86*7:1[1:maxNpeaks]
+    }
+
     minLimit <- floor(min(refeynCalib$contrasts)*cstFactorForContrast)
     updateNumericInput(session,"leftLimitWindowRangeContrast",
                        value = minLimit, min = -1e6, max = 0, step = 1)
@@ -76,38 +82,47 @@ observeEvent(list(input$leftLimitWindowRangeContrast,input$rightLimitWindowRange
   
 })
 
-modify_refeynCalibration_data <- reactive({
-  
-  if (!(reactives$data_loadedCalibration)) {return(NULL)}
-  
-  Sys.sleep(0.2)
-  
-  lower_limit_histogram <- input$window_rangeContrast[1] / cstFactorForContrast
-  upper_limit_histogram <- input$window_rangeContrast[2] / cstFactorForContrast
-  window                <- c(lower_limit_histogram,upper_limit_histogram)
-    
-  refeynCalib$create_histo(window=window,bin_width=input$bin_widthContrast   / cstFactorForContrast)
-  
-  starting_values <- get_guess_positions(input$starting_valuesContrast,cstFactorForContrast)
-  
-  refeynCalib$fit_histo(guess_pos=starting_values, max_std=0.1)
-  
-  knownMasses <- get_guess_positions(input$knownMasses)
-  
-  if (length(knownMasses) != length(starting_values)) {
-    shinyalert(title="The number of markers (known masses) does not match the number of fitted gaussians.
-               ", type = "warning",closeOnClickOutside=F)
-    
-    Sys.sleep(3)
-    return(NULL)
-  } 
-  
-  refeynCalib$calibrate(knownMasses)
+observeEvent(input$triggerFittingCalib,{
 
-  updateModels(refeynCalib$calib_params[1],refeynCalib$calib_params[2])
+    req(reactives$data_loadedCalibration)
 
-  # We want to evaluate this expression everytime the user changes sth in the UI 
-  return(refeynCalib) 
+    reactives$data_loadedCalibration  <- FALSE # Set to false so we replot the histogram
+    reactives$calibration_data_fitted <- FALSE
+
+    lower_limit_histogram <- input$window_rangeContrast[1] / cstFactorForContrast
+    upper_limit_histogram <- input$window_rangeContrast[2] / cstFactorForContrast
+    window                <- c(lower_limit_histogram,upper_limit_histogram)
+
+    refeynCalib$create_histo(window=window,bin_width=input$bin_widthContrast   / cstFactorForContrast)
+
+    starting_values <- get_guess_positions(input$starting_valuesContrast,cstFactorForContrast)
+
+    fit_flag <- refeynCalib$fit_histo(guess_pos=starting_values, max_std=0.05,baseline=input$baselineCalibration)
+
+    if (!fit_flag) {
+        shinyalert(title="Fitting failed",
+                   text = "The fitting did not converge. Please check your input parameters.",
+                   type = "error",closeOnClickOutside=F)
+        reactives$data_loadedCalibration  <- TRUE
+        return(NULL)
+    }
+
+    knownMasses <- get_guess_positions(input$knownMasses)
+
+    if (length(knownMasses) != length(starting_values)) {
+        shinyalert(title="The number of markers (known masses) does not match the number of fitted gaussians.",
+        type = "warning",closeOnClickOutside=F)
+        reactives$data_loadedCalibration  <- TRUE
+        return(NULL)
+    }
+
+    refeynCalib$calibrate(knownMasses)
+
+    updateModels(refeynCalib$calib_params[1],refeynCalib$calib_params[2])
+
+    reactives$data_loadedCalibration  <- TRUE
+    reactives$calibration_data_fitted <- TRUE
+
 })
 
 observeEvent(list(input$interceptCustom,input$slopeCustom),{
@@ -180,32 +195,6 @@ observeEvent(input$colorForLegendCalibration,{
   
 })
 
-output$contrast_plot_calib <- renderPlotly({
-  
-  if (is.null(modify_refeynCalibration_data())) {return(NULL)}
-  
-  req(input$legendInfoCalibration)
-  
-  legends <- isolate(get_legend_from_rhandTable(input$legendInfoCalibration))
-  colors  <- isolate(get_colors_from_rhandTable(input$legendInfoCalibration))
-  sels    <- isolate(get_sel_from_rhandTable(input$legendInfoCalibration))
-
-  plot <-   plotRefeynFit(list(refeynCalib),0,input$plot_widthCalibration,
-                          input$plot_heightCalibration, input$plot_typeCalibration,
-                          input$plot_axis_sizeCalibration,legends,colors,sels,
-                          colorsHist=histogram_palette,
-                          addMassesToLegend=input$show_contrastLegend,
-                          addPercentageToLegend=FALSE,
-                          contrasts=TRUE,
-                          normalize=FALSE,
-                          add_labels=input$show_contrastPlot,
-                          add_percentages=FALSE,
-                          stacked=FALSE)
-
-  return(plot)
-  # defined in server_files/plot_functions.R
-})
-
 observeEvent(list(input$calibrationMethod,input$activateCalibration),{
   reactives$calibrationMethod <- isolate(input$calibrationMethod)
 })
@@ -213,47 +202,82 @@ observeEvent(list(input$calibrationMethod,input$activateCalibration),{
 output$calibrationMethod <- reactive({reactives$calibrationMethod})
 outputOptions(output, "calibrationMethod", suspendWhenHidden = FALSE)
 
-output$mass_vs_contrast <- renderPlotly({
-  
-  if (is.null(modify_refeynCalibration_data())) {return(NULL)}
-  
-  contrasts <- refeynCalib$calib_points
-  masses    <- refeynCalib$calib_stand
-  slope     <- refeynCalib$calib_params[1]
-  intercept <- refeynCalib$calib_params[2]
-  
-  plot <- plotMass_vs_contrast(masses,contrasts,slope,intercept,
-                               input$plot_widthCalibration, 
-                               input$plot_heightCalibration, input$plot_typeCalibration,
-                               input$plot_axis_sizeCalibration)
-  return(plot)
+output$contrast_plot_calib <- renderPlotly({
+
+    req(input$legendInfoCalibration)
+    req(reactives$data_loadedCalibration)
+
+    legends <- isolate(get_legend_from_rhandTable(input$legendInfoCalibration))
+    colors  <- isolate(get_colors_from_rhandTable(input$legendInfoCalibration))
+    sels    <- isolate(get_sel_from_rhandTable(input$legendInfoCalibration))
+
+    plot <-   plotRefeynFit(list(refeynCalib),
+        input$baselineCalibration,
+        input$plot_widthCalibration,
+        input$plot_heightCalibration,
+        input$plot_typeCalibration,
+        input$plot_axis_sizeCalibration,
+        legends,
+        colors,
+        sels,
+        colorsHist=histogram_palette,
+        addMassesToLegend=input$show_contrastLegend,
+        addPercentageToLegend=FALSE,
+        contrasts=TRUE,
+        normalize=FALSE,
+        add_labels=input$show_contrastPlot,
+        add_percentages=FALSE,
+        stacked=FALSE)
+
+    return(plot)
   # defined in server_files/plot_functions.R
-}
-)
+})
+
+output$mass_vs_contrast <- renderPlotly({
+
+    req(reactives$calibration_data_fitted)
+
+    contrasts <- refeynCalib$calib_points
+    masses    <- refeynCalib$calib_stand
+    slope     <- refeynCalib$calib_params[1]
+    intercept <- refeynCalib$calib_params[2]
+
+    plot <- plotMass_vs_contrast(
+        masses,contrasts,slope,intercept,
+        input$plot_widthCalibration,
+        input$plot_heightCalibration,
+        input$plot_typeCalibration,
+        input$plot_axis_sizeCalibration
+        )
+
+    return(plot)
+# defined in server_files/plot_functions.R
+})
 
 output$fittedParamsCalibration <- renderTable({
-  
-  if (is.null(modify_refeynCalibration_data())) {return(NULL)}
-  
-  table <- refeynCalib$fit_table
-  table[,1] <- table[,1]*cstFactorForContrast
-  table[,2] <- table[,2]*cstFactorForContrast
-  table[,1] <- paste0(signif(table[,1],2), " / 1e3")
-  table[,2] <- paste0(signif(table[,2],2), " / 1e3")
-  
-  return(table[,1:(ncol(table)-1)])
+
+    req(reactives$calibration_data_fitted)
+
+    table <- refeynCalib$fit_table
+    table[,1] <- table[,1]*cstFactorForContrast
+    table[,2] <- table[,2]*cstFactorForContrast
+    table[,1] <- paste0(signif(table[,1],2), " / 1e3")
+    table[,2] <- paste0(signif(table[,2],2), " / 1e3")
+
+    return(table[,1:(ncol(table)-1)])
+
 },digits = 0)
 
 output$calibParams <- renderTable({
 
-  if (is.null(modify_refeynCalibration_data())) {return(NULL)}
+    req(reactives$calibration_data_fitted)
 
-  slope     <- refeynCalib$calib_params[1] * 1e6
-  intercept <- refeynCalib$calib_params[2] * 1e6
-  r_sq      <- refeynCalib$calib_r2
-  
-  table <- data.frame(slope,intercept,r_sq)
-  colnames(table) <- c("Slope * 1e6","Intercept * 1e6","R squared")
-  return(table)
+    slope     <- refeynCalib$calib_params[1] * 1e6
+    intercept <- refeynCalib$calib_params[2] * 1e6
+    r_sq      <- refeynCalib$calib_r2
+
+    table <- data.frame(slope,intercept,r_sq)
+    colnames(table) <- c("Slope * 1e6","Intercept * 1e6","R squared")
+    return(table)
+
 },digits = 4)
-

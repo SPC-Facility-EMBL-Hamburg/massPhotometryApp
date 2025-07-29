@@ -11,27 +11,71 @@ class RefeynCalib:
     '''
 
     def __init__(self):
-        
+
+        self.fit = None
         return None
 
     def load_data_h5(self,filename):
-        self.fn = filename
-        # Load data
+
+        self.fn           = filename
+
         data = h5py.File(self.fn, 'r')
 
-        self.contrasts  = np.array(data['contrasts'][:]).squeeze()
+        data_keys = data.keys()
+
+        # only one dataset
+        if 'contrasts' in data_keys:
+
+            contrasts       = np.array(data['contrasts'][:]).squeeze()
+            self.contrasts  = contrasts[~np.isnan(contrasts)]
+
+        # only one dataset
+        elif 'ratiometricGCC' in data_keys:
+
+            contrasts       = np.array(data['ratiometricGCC'][:]).squeeze()
+            self.contrasts  = contrasts[~np.isnan(contrasts)]
+
+        # Load merged data
+        elif 'per_movie_events' in data_keys:
+
+            allContrasts = []
+
+            for movie in data['per_movie_events'].keys():
+
+                try: 
+
+                    pyObj     = data['per_movie_events'][movie]
+                    contrasts = np.array(pyObj['contrasts'])
+                    allContrasts.append(contrasts)
+
+                except:
+
+                    pass
+            
+            self.contrasts  = np.concatenate([arr for arr in allContrasts])
+
         self.n_binding  = np.sum(self.contrasts<0)
         self.create_histo()
         self.findInitialPeaks()
 
         return None
 
+
     def load_data_csv(self,filename):
         self.fn = filename
         
         data = pd.read_csv(filename)
 
-        contrasts  = np.array(data['contrasts']).squeeze()
+        # Check if contrasts are in the data
+        if 'contrasts' in data.columns:
+
+            contrasts  = np.array(data['contrasts']).squeeze()
+
+        else:
+
+            raise ValueError("No contrasts found in the CSV file.")
+
+
         self.contrasts = contrasts[~np.isnan(contrasts)]
         self.n_binding  = np.sum(self.contrasts<0)
         self.create_histo()
@@ -76,14 +120,7 @@ class RefeynCalib:
             list_pos.append((self.popt[3*i]))
             list_ampl.append((self.popt[3*i+1]))
             list_sigma.append((self.popt[3*i+2]))
-
-            # Check Python version
-            if sys.version_info >= (3, 8):
-                # Use np.trapezoid for Python 3.8 and above
-                list_counts.append(round(np.trapezoid(y=self.fit[:,i+1], x=self.fit[:,0]) / np.diff(self.hist_centers_contrasts)[0]))
-            else:
-                # Use np.trapz for Python versions below 3.8
-                list_counts.append(round(np.trapz(y=self.fit[:,i+1], x=self.fit[:,0]) / np.diff(self.hist_centers_contrasts)[0]))
+            list_counts.append(round(np.trapezoid(y=self.fit[:,i+1], x=self.fit[:,0]) / np.diff(self.hist_centers_contrasts)[0]))
 
         # Create Pandas Dataframe
         self.fit_table = pd.DataFrame(data={'Position / contrast': list_pos,
@@ -95,49 +132,58 @@ class RefeynCalib:
 
         return None
 
-    def fit_histo(self, guess_pos=[0], max_std=0.1,tol=0.05):
+    def fit_histo(self, guess_pos=[0], max_std=0.02,tol=0.05,baseline=0):
         '''
         Fit gaussians to histogram
         guess: list with guessed centers, defines the number of gaussians to be used, 
         '''
 
-        # Get amplitude for each guess position
-        guess_amp = []
-        for pos in guess_pos:
-            ind = np.argmin(np.abs(self.hist_centers_contrasts - pos))
-            guess_amp.append(self.hist_counts_contrasts[ind])
+        self.fit = None
 
-        fit_guess    = np.column_stack((np.array(guess_pos), np.array(guess_amp), np.array([0.001]*len(guess_pos)))).flatten()
-        lower_bounds = np.column_stack((np.array(guess_pos) - tol , np.array([0]*len(guess_pos)), np.array([0]*len(guess_pos)))).flatten()
-        upper_bounds = np.column_stack((np.array(guess_pos) + tol , np.array([np.max(self.hist_counts_contrasts)*1.2]*len(guess_pos)), np.array([max_std]*len(guess_pos)))).flatten()
-        bounds = (tuple(lower_bounds), tuple(upper_bounds))
+        try:
 
-        # Use truncated gaussian function
-        def fitting_helper_func(x,*params):
-            return multi_gauss(x,*params)
+            # Get amplitude for each guess position
+            guess_amp = []
+            for pos in guess_pos:
+                ind = np.argmin(np.abs(self.hist_centers_contrasts - pos))
+                guess_amp.append(self.hist_counts_contrasts[ind])
 
-        func = fitting_helper_func
+            fit_guess    = np.column_stack((np.array(guess_pos), np.array(guess_amp), np.array([0.001]*len(guess_pos)))).flatten()
+            lower_bounds = np.column_stack((np.array(guess_pos) - tol , np.array([0]*len(guess_pos)), np.array([0]*len(guess_pos)))).flatten()
+            upper_bounds = np.column_stack((np.array(guess_pos) + tol , np.array([np.max(self.hist_counts_contrasts)*1.2]*len(guess_pos)), np.array([max_std]*len(guess_pos)))).flatten()
+            bounds = (tuple(lower_bounds), tuple(upper_bounds))
 
-        self.popt, self.pcov = curve_fit(func, self.hist_centers_contrasts, self.hist_counts_contrasts, p0=fit_guess, bounds=bounds)  #, method='dogbox', maxfev=1E5)
-        
-        # Create fit and individual gaussians for plotting
-        # Finer grid
-        x = np.linspace(np.min(self.hist_centers_contrasts), np.max(self.hist_centers_contrasts), 1000)
-        single_gauss = []
-        for i in range(0, len(self.popt), 3):
-            ctr = self.popt[i]
-            amp = self.popt[i+1]
-            wid = self.popt[i+2]
-            single_gauss.append(func(x, ctr, amp, wid))
-        # Sum of all
-        fit_sum = func(x, *self.popt)
-        # Create one array for all
-        self.fit = np.column_stack((x, np.array(single_gauss).T, fit_sum))
-        # Errors
-        self.fit_error = np.sqrt(np.diag(self.pcov))
-        # Create fit table
-        self.create_fit_table()
-        return None
+            # Use truncated gaussian function
+            def fitting_helper_func(x,*params):
+                return multi_gauss(x,*params) + baseline
+
+            func = fitting_helper_func
+
+            self.popt, self.pcov = curve_fit(func, self.hist_centers_contrasts, self.hist_counts_contrasts, p0=fit_guess, bounds=bounds)  #, method='dogbox', maxfev=1E5)
+
+            # Create fit and individual gaussians for plotting
+            # Finer grid
+            x = np.linspace(np.min(self.hist_centers_contrasts), np.max(self.hist_centers_contrasts), 1000)
+            single_gauss = []
+            for i in range(0, len(self.popt), 3):
+                ctr = self.popt[i]
+                amp = self.popt[i+1]
+                wid = self.popt[i+2]
+                single_gauss.append(func(x, ctr, amp, wid))
+            # Sum of all
+            fit_sum = func(x, *self.popt)
+            # Create one array for all
+            self.fit = np.column_stack((x, np.array(single_gauss).T, fit_sum))
+            # Errors
+            self.fit_error = np.sqrt(np.diag(self.pcov))
+            # Create fit table
+            self.create_fit_table()
+
+        except:
+
+            return False
+
+        return True
 
     def calibrate(self,calib_floats):
         ''' 
@@ -186,3 +232,23 @@ class RefeynCalib:
 #refeyn.calibrate([66, 146, 480])
 #print(refeyn.calib_params)
 #print(refeyn.fit_table)
+
+
+# plot the counts histogram
+
+if False:
+    import matplotlib.pyplot as plt
+
+
+    r = RefeynCalib()
+    r.load_data_h5('/home/os/Downloads/007_MFP1.h5')
+    print('here')
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(r.hist_centers_contrasts, r.hist_counts_contrasts, width=r.bin_width, color='blue', alpha=0.7, label='Counts Histogram')
+    # Set the x-limits
+    plt.xlim(-0.05, r.hist_window[1])
+    plt.xlabel('Contrast')
+    plt.ylabel('Counts')
+    plt.title('Counts Histogram of Contrasts')      
+    plt.show()

@@ -28,7 +28,7 @@ shinyUI(dashboardPage(title = paste0(appName),
 
           source("ui_files/ui_load_input_box.R",local = TRUE)$value, 
 
-                    #Custom CSS to increase plot height
+           #Custom CSS to increase plot height
           tags$head(tags$style("
           #counts_plot{height:600px !important;}
           #counts_plotNormalized{height:600px !important;}
@@ -93,10 +93,18 @@ shinyUI(dashboardPage(title = paste0(appName),
             source("ui_files/ui_export_H5file_with_masses.R",local = TRUE)$value)
         
         )),
+
       tabItem(tabName = "menu_calibration",
               fluidRow(
                 source("ui_files/ui_load_input_box_calibration.R",local = TRUE)$value, 
-                
+
+                #Custom CSS to increase plot height
+                tags$head(tags$style("
+                #contrast_plot_calib{height:600px !important;}
+                #mass_vs_contrast{height:600px !important;}
+                "
+                                   )),
+
                 conditionalPanel(condition = "output.calibrationMethod == 'calibrationFile' 
                                  && input.activateCalibration",
                 

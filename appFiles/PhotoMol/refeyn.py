@@ -29,26 +29,26 @@ class Refeyn:
 
         data_keys = data.keys()
 
-        # only one dataset
+        # Check for contrasts
         if 'contrasts' in data_keys:
+            contrasts = np.array(data['contrasts'][:]).squeeze()
+            self.contrasts = contrasts[~np.isnan(contrasts)]
 
-            contrasts       = np.array(data['contrasts'][:]).squeeze()
-            self.contrasts  = contrasts[~np.isnan(contrasts)]
-
+        # Simplified block for loading masses
+        key = None
         if 'masses_kDa' in data_keys:
+            key = 'masses_kDa'
+        elif 'calibrated_values' in data_keys:
+            key = 'calibrated_values'
 
-            masses_kDa      = np.array(data['masses_kDa'][:]).squeeze()
-            self.masses_kDa = masses_kDa 
+        if key:
+            self.masses_kDa = np.array(data[key][:]).squeeze()
             self.create_binding_events()
-
         else:
-
             if 'calibrated_values' in data_keys:
-
-                gradient        = np.array(data['calibration']['gradient'])
-                offset          = np.array(data['calibration']['offset'])
-
-                self.masses_kDa   = compute_contrasts_to_mass(self.contrasts,gradient,offset)
+                gradient = np.array(data['calibration']['gradient'])
+                offset = np.array(data['calibration']['offset'])
+                self.masses_kDa = compute_contrasts_to_mass(self.contrasts, gradient, offset)
                 self.create_binding_events()
 
         # Load merged data
@@ -88,16 +88,18 @@ class Refeyn:
         contrasts       = np.array(data['contrasts']).squeeze()
         self.contrasts  = contrasts[~np.isnan(contrasts)]
 
+        # Support both 'masses_kDa' and 'calibrated_values' columns
+        key = None
         if 'masses_kDa' in data.columns:
+            key = 'masses_kDa'
+        elif 'calibrated_values' in data.columns:
+            key = 'calibrated_values'
 
-            self.masses_kDa   = np.array(data['masses_kDa']).squeeze()
-
+        if key:
+            self.masses_kDa = np.array(data[key]).squeeze()
             try:
-
                 self.create_binding_events()
-
             except:
-                
                 pass
 
         return None

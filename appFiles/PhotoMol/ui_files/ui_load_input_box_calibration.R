@@ -38,9 +38,9 @@ box(title = "Input", width = 3, solidHeader = T, status = "primary",
       
       column(10, p(HTML("<b>MassPhotometry file </b>"),
                    span(shiny::icon("info-circle"), id = "info_uuCalib1-1"),
-                   fileInput("massPhotometryFileCalibration", NULL,accept = c(".h5")),
+                   fileInput("massPhotometryFileCalibration", NULL,accept = c(".h5",".csv")),
                    tippy::tippy_this(elementId = "info_uuCalib1-1",
-                                     tooltip = ".h5 (Hierarchical Data Format) file with a 1D dataset
+                                     tooltip = ".h5 (Hierarchical Data Format) or csv file with a 1D dataset
                                      called 'contrasts'"))),
       
       # Little hack to use the withBusyIndicatorUI function (loading spinner)
@@ -58,7 +58,7 @@ box(title = "Input", width = 3, solidHeader = T, status = "primary",
                                                 tooltip = "Used to group the data and build the histogram. 
                                                 ",placement = "right")),
                        
-      column(8, p(HTML("<b>Initial guesses * 1e3</b>"),
+      column(10, p(HTML("<b>Initial guesses * 1e3</b>"),
                   span(shiny::icon("info-circle"), id = "info_uuCalib1-12"),
                   
                   textInput("starting_valuesContrast", label=NULL,value="50"),
@@ -67,7 +67,7 @@ box(title = "Input", width = 3, solidHeader = T, status = "primary",
                                  Values should be separated by spaces. Units are contrasts. 
                                     ",placement = "right"))),
       
-                       column(8, p(HTML("<b>Known masses</b>"),
+                       column(10, p(HTML("<b>Known masses</b>"),
                                    span(shiny::icon("info-circle"), id = "info_uuCalib1-5"),
                                    
                                    textInput("knownMasses", label=NULL,value="50"),
@@ -97,8 +97,23 @@ box(title = "Input", width = 3, solidHeader = T, status = "primary",
                                    numericInput("rightLimitWindowRangeContrast", label = NULL, 0, min = 0, max = 1e6)),
                               tippy::tippy_this(elementId = "info_uuCalib1-11",
                                                 tooltip = "Set the right limit for the window range slider. 
-                                 Changing this value will automatically update the selected window range.",placement = "right"))
-                       
+                                 Changing this value will automatically update the selected window range.",placement = "right")),
+
+                        column(6, p(HTML('<p style="margin-bottom:0px;"><br></p>'),
+                            actionButton(
+                            inputId = "triggerFittingCalib",label = "Trigger fitting!",
+                            icon("meteor"),
+                            style="color: #fff; background-color: #337ab7;
+                            border-color: #2e6da4"))
+                        ),
+
+                        # Allow including a small baseline
+                        column(4, p(HTML("<b>Baseline</b>"),
+                        span(shiny::icon("info-circle"), id = "info_uu1-baseline-calib"),
+                        numericInput("baselineCalibration", label = NULL, 0, min = 0, max = 20)),
+                        tippy::tippy_this(elementId = "info_uu1-baseline-calib",
+                        tooltip = "Useful when there is a constant background noise.",placement = "right"))
+
     )))))
 
 
