@@ -68,7 +68,15 @@ getFileNameExtension <- function (fn) {
 get_guess_positions <- function(guess_positions_list,factor=1) {
   
   guess_positions_list <- trimws(guess_positions_list)
-  np_array(as.numeric(strsplit(guess_positions_list,"\\s+")[[1]]) / factor)
+  positions <- as.numeric(strsplit(guess_positions_list,"\\s+")[[1]]) / factor
+
+  # Force a numeric vector
+  positions <- c(positions)
+
+  # Sort them from lowest to highest
+  positions <- sort(positions)
+
+  return(positions)
   
 }
 
@@ -88,17 +96,11 @@ get_mass_limits <- function(hist_counts,hist_mass) {
 
 roundUp <- function(x,m) m*ceiling(x / m)
 
-## Get include and conditions vectors from capillary versus condition tables 
-
-get_legend_from_rhandTable <- function(table) return(hot_to_r(table)$legends)
-get_colors_from_rhandTable <- function(table) return(hot_to_r(table)$color)
-get_sel_from_rhandTable    <- function(table) return(hot_to_r(table)$select)
-
 get_df_mass <- function(refeyn,contrasts,all=FALSE) {
 
   dfMass <- data.frame("mass"=refeyn$contrasts)
 
-  if (!contrasts) dfMass <- data.frame("mass"=refeyn$masses_kDa)
+  if (!contrasts) dfMass <- data.frame("mass"=refeyn$masses)
 
   if (!all) {
 
@@ -128,5 +130,17 @@ get_bin_info <- function(refeyn,contrasts) {
   }
 
   return(list("start"=start,"end"=end,"size"=size))
+
+}
+
+set_column_names_legend_df <- function(df) {
+
+    # Use nicer column names
+  colnames(df)[1] <- 'Legend'
+  colnames(df)[2] <- 'Color'
+  colnames(df)[3] <- 'Show trace'
+  colnames(df)[4] <- 'Show legend'
+
+  return(df)
 
 }

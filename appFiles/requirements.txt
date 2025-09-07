@@ -4,3 +4,6 @@ pandas
 scipy
 h5py
 xlrd
+kaleido
+plotly
+pyphotomol

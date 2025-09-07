@@ -30,14 +30,18 @@ add_mass_histogram <- function(fig,dfMass,bin_info,normalize,hex_color) {
 
 }
 
-add_gaussian_sum_trace <- function(fig,refeynFit,baseline,scaling_factor,colorPalette,legends) {
+add_gaussian_sum_trace <- function(
+  fig,refeynFit,baseline,scaling_factor,
+  color,legend,showlegend,linewidth) {
 
   gaussianSum <- refeynFit[,c(1,ncol(refeynFit))] %>% filter(y > baseline+0.05 | y == 0)
   gaussianSum$y <- gaussianSum$y * scaling_factor
 
-  fig <- fig %>% add_trace(data=gaussianSum,color=I(colorPalette[1]),x=~x,y=~y,
+  fig <- fig %>% add_trace(data=gaussianSum,color=I(color),x=~x,y=~y,
                            type = 'scatter', mode = 'lines',
-                           name=legends[1],list(width = 3))
+                           showlegend=showlegend,
+                           name=legend,
+                           line=list(width = linewidth))
 
   return(fig)
 
@@ -103,18 +107,23 @@ add_percentages_to_legend <- function(legends,refeynFitTable) {
   return(legends)
 }
 
-add_gaussian_traces <- function(fig,axis_size,refeynFit,refeynFitTable,legends,
-                                colorPalette,sels,baseline,scaling_factor,
-                                addMassesToLegend=TRUE,addPercentageToLegend=TRUE,
-                                contrasts=FALSE,add_labels=TRUE,add_percentages=TRUE,stacked=TRUE) {
+add_gaussian_traces <- function(
+  fig,axis_size,refeynFit,refeynFitTable,legends,
+  colorPalette,sels,leg_sels,baseline,scaling_factor,
+  addMassesToLegend=TRUE,addPercentageToLegend=TRUE,
+  contrasts=FALSE,add_labels=TRUE,add_percentages=TRUE,stacked=TRUE,
+  linewidth=3) {
 
   if (contrasts) refeynFit$x <- refeynFit$x * cstFactorForContrast
 
   if (ncol(refeynFit) > 3) {
 
-      if (sels[1]) fig <- add_gaussian_sum_trace(fig,refeynFit,baseline,scaling_factor,colorPalette,legends)
+      if (sels[1]) fig <- add_gaussian_sum_trace(
+        fig,refeynFit,baseline,scaling_factor,
+        colorPalette[1],legends[1],leg_sels[1],linewidth)
 
       sels         <- sels[-1]
+      leg_sels     <- leg_sels[-1]
 
       proceed <- sum(sels) > 0
       if (proceed) {
@@ -150,7 +159,8 @@ add_gaussian_traces <- function(fig,axis_size,refeynFit,refeynFitTable,legends,
       fig    <- fig %>% add_trace(
         data=tempDf,x=~x,y=~value,
         color=I(hexColor),type = 'scatter', mode = 'lines',
-        name=var,line = list(width = 3))
+        showlegend=leg_sels[counterColorPalette],
+        name=var,line = list(width = linewidth))
     }
 
     counterColorPalette <- counterColorPalette + 1
@@ -162,21 +172,70 @@ add_gaussian_traces <- function(fig,axis_size,refeynFit,refeynFitTable,legends,
 }
 
 plotRefeynFit <- function(
-  photoMolModels,baseline_shared,plot_width, plot_height, plot_type, axis_size,
-  legendsAll,colorPaletteAll,selsAll,
-  colorsHist,addMassesToLegend=TRUE,addPercentageToLegend=FALSE,contrasts=FALSE,
-  normalize=FALSE,add_labels=TRUE,add_percentages=TRUE,stacked=FALSE) {
+  photoMolModels,
+  plot_config,
+  legends_config,
+  colorsHist,
+  contrasts=FALSE,
+  normalize=FALSE,
+  stacked=FALSE) {
 
-  yLabel <- ifelse(normalize,"Norm. counts","Counts")
+  legendsAll <- legends_config$legends
+  colorPaletteAll <- legends_config$colors
+  selsAll <- legends_config$sels
+  selLegAll <- legends_config$leg_sels
 
-  y <- list(title = yLabel,titlefont = list(size = axis_size),
-            tickfont = list(size = axis_size),standoff = 20,automargin = TRUE)
+  plot_width  <- plot_config$width
+  plot_height <- plot_config$height
+  plot_type   <- plot_config$type
+  axis_size   <- plot_config$axis_size
+  legend_font_size <- plot_config$legend_font_size
+
+  addMassesToLegend <- plot_config$addMassesToLegend
+  addPercentageToLegend <- plot_config$addPercentageToLegend
+  add_labels <- plot_config$add_labels
+  add_percentages <- plot_config$add_percentages
+
+  show_grid_x <- plot_config$show_grid_x
+  show_grid_y <- plot_config$show_grid_y
+
+  show_axis_lines <- plot_config$show_axis_lines
+
+  tickwidth <- plot_config$tickwidth
+  ticklen   <- plot_config$ticklen
+
+  linewidth <- plot_config$linewidth
+
+  yLabel <- ifelse(normalize,"Normalised counts","Counts")
+
+  y <- list(
+    title = yLabel,
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    showgrid= show_grid_y,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
 
   xtitle <- "Mass (kDa)"
-  if (contrasts) xtitle <- "Ratiometric contrast * 1e3"
+  if (contrasts) xtitle <- "Ratiometric contrast * 10³"
 
-  x <- list(title = xtitle,titlefont = list(size = axis_size),
-            tickfont = list(size = axis_size))
+  x <- list(
+    title = xtitle,
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    showgrid = show_grid_x,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
 
   if (stacked) {
     figs <- list()
@@ -198,7 +257,8 @@ plotRefeynFit <- function(
     dfMass <- get_df_mass(refeyn,contrasts)
 
     scaling_factor <- ifelse(normalize,1/nrow(dfMass),1)
-    baseline       <- baseline_shared * scaling_factor
+
+    baseline       <- refeyn$baseline * scaling_factor
 
     bin_info <- get_bin_info(refeyn,contrasts)
 
@@ -212,9 +272,9 @@ plotRefeynFit <- function(
         fig <- add_mass_histogram(fig,dfMass,bin_info,normalize,color_hst)
     }
 
-    if (is.null(refeyn$fit)) next
+    if (is.null(refeyn$fitted_data)) next
 
-    refeynFit  <- as.data.frame(refeyn$fit)
+    refeynFit  <- as.data.frame(refeyn$fitted_data)
     prevNames  <- colnames(refeynFit)[-ncol(refeynFit)]
 
     colnames(refeynFit) <- c("x",prevNames[-1],"y")
@@ -224,6 +284,7 @@ plotRefeynFit <- function(
     colorPalette <- colorPaletteAll[id_start:id_end]
     legends      <- legendsAll[id_start:id_end]
     sels         <- selsAll[id_start:id_end]
+    sels_leg     <- selLegAll[id_start:id_end] # To select which legends to show in the plot
 
     id_start     <- id_end + 1
 
@@ -231,15 +292,18 @@ plotRefeynFit <- function(
 
     if (stacked) {
 
-      figs[[model_cnt]] <- add_gaussian_traces(figs[[model_cnt]],axis_size,refeynFit,refeyn$fit_table,
-                                               legends,colorPalette,sels,baseline,scaling_factor,
-                                               addMassesToLegend,addPercentageToLegend,contrasts,
-                                               add_labels,add_percentages,stacked)
+      figs[[model_cnt]] <- add_gaussian_traces(
+        figs[[model_cnt]],axis_size,refeynFit,refeyn$fit_table,
+        legends,colorPalette,sels,sels_leg,baseline,scaling_factor,
+        addMassesToLegend,addPercentageToLegend,contrasts,
+        add_labels,add_percentages,stacked,linewidth)
 
     } else {
-      fig <- add_gaussian_traces(fig,axis_size,refeynFit,refeyn$fit_table,legends,colorPalette,sels,baseline,
-                                 scaling_factor,addMassesToLegend,addPercentageToLegend,contrasts,
-                                 add_labels,add_percentages,stacked)
+      fig <- add_gaussian_traces(
+        fig,axis_size,refeynFit,refeyn$fit_table,
+        legends,colorPalette,sels,sels_leg,baseline,
+        scaling_factor,addMassesToLegend,addPercentageToLegend,contrasts,
+        add_labels,add_percentages,stacked,linewidth)
     }
 
     # refeynFit is a matrix with n columns whose 1st column is the x axis,
@@ -250,10 +314,35 @@ plotRefeynFit <- function(
 
   if (!stacked) {
     fig <- fig %>% layout(barmode = "overlay") %>%
-    layout(xaxis = x, yaxis = y,showlegend = TRUE,font="Roboto",legend = list(font = list(size = axis_size)))
+    layout(xaxis = x, yaxis = y,showlegend = TRUE,font="Roboto",
+           legend = list(font = list(size = legend_font_size)))
   } else {
     fig <- subplot(figs,nrows = length(figs), shareY = TRUE, shareX = TRUE)
   }
+
+  # Font size 12 requires x -0.1 and left margin 60
+  # Font size 20 requires x -0.2 and left margin 100
+
+  #x_offset_paper <- -0.11*(axis_size/12)
+  #left_margin    <- 62*(axis_size/12)
+
+  #if (stacked) {
+
+    # Include centered annotation for the y axis title
+  #  fig <- fig %>% layout(annotations = list(
+  #    x = x_offset_paper,
+  #    y = 0.5,
+  #    text = yLabel,
+  #    showarrow = FALSE,
+  #    xref = "paper",
+  #    yref = "paper",
+  #    textangle = -90,
+  #    font = list(size = axis_size)
+  #  ))
+
+    # Increase left margin to allow the y axis title to be fully visible
+  #  fig <- fig %>% layout(margin = list(l = left_margin))
+  #}
 
   fig <- configFig(fig,plot_width, plot_height, plot_type,paste0("MP_plot-",Sys.Date()))
   
@@ -278,17 +367,32 @@ addSimulation2plotRefeynFit <- function(fig,mean,std,amplitude,leftBound) {
   
 }
 
-plotMass_vs_contrast <- function(mass,contrast,slope,intercept,
-                                 plot_width, plot_height, plot_type,axis_size) {
+plotMass_vs_contrast <- function(
+  mass,contrast,slope,intercept,
+  plot_config) {
+
+  plot_width  <- plot_config$width
+  plot_height <- plot_config$height
+  plot_type   <- plot_config$type
+  axis_size   <- plot_config$axis_size
+  linewidth   <- plot_config$linewidth
+
+  show_grid_x <- plot_config$show_grid_x
+  show_grid_y <- plot_config$show_grid_y
+  show_axis_lines <- plot_config$show_axis_lines
+
+  tickwidth <- plot_config$tickwidth
+  ticklen   <- plot_config$ticklen
   
   fig <- plot_ly()
   
   df <- data.frame(mass,contrast)
 
-  fig    <- fig %>% add_trace(data=df,x=~mass,y=~contrast,
-                              color=I("#377EB8"),
-                              type = 'scatter', mode = 'markers'
-                              )
+  fig    <- fig %>% add_trace(
+    data=df,x=~mass,y=~contrast,
+    color=I("#377EB8"),
+    type = 'scatter', mode = 'markers'
+  )
   
   x1 <- min(mass) 
   y1 <- x1*slope + intercept
@@ -297,27 +401,73 @@ plotMass_vs_contrast <- function(mass,contrast,slope,intercept,
   
   dfPred <- data.frame(x=c(x1,x2),y=c(y1,y2))
 
-  fig    <- fig %>% add_trace(data=dfPred,x=~x,y=~y,
-                              color=I("#ffa500"),
-                              type = 'scatter', mode = 'lines',
-                              list(width = 3)
+  fig    <- fig %>% add_trace(
+    data=dfPred,x=~x,y=~y,
+    color=I("#ffa500"),
+    type = 'scatter', mode = 'lines',
+    list(width = linewidth)
   )
   
-  y <- list(title = "Ratiometric contrast",titlefont = list(size = axis_size), 
-            tickfont = list(size = axis_size))
+  y <- list(
+    title = "Ratiometric contrast",
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    showgrid = show_grid_y,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
   
-  x <- list(title = "Mass (kDa)",titlefont = list(size = axis_size),
-            tickfont = list(size = axis_size))
+  x <- list(
+    title = "Mass (kDa)",
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    showgrid = show_grid_x,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
   
-  fig <- fig %>% layout(xaxis = x, yaxis = y,showlegend = FALSE,
-                        font="Roboto",legend = list(font = list(size = axis_size)))
+  fig <- fig %>% layout(
+    xaxis = x, yaxis = y,
+    showlegend = FALSE,
+    font="Roboto",
+    legend = list(font = list(size = axis_size)))
   
-  fig <- configFig(fig,plot_width, plot_height, plot_type,paste0("calibrationMassVsContrast-",Sys.Date()))
+  fig <- configFig(
+    fig,plot_width, plot_height, plot_type,
+    paste0("calibrationMassVsContrast-",Sys.Date())
+  )
+
   return(fig)
   
 }
 
-plotRefeynMassHist <- function(models,histogram_palette,plot_width, plot_height, plot_type,axis_size) {
+plotRefeynMassHist <- function(
+  models,
+  histogram_palette,
+  plot_config,
+  contrasts=FALSE) {
+
+  plot_width  <- plot_config$width
+  plot_height <- plot_config$height
+  plot_type   <- plot_config$type
+  axis_size   <- plot_config$axis_size
+  legend_font_size <- plot_config$legend_font_size
+
+  show_grid_x <- plot_config$show_grid_x
+  show_grid_y <- plot_config$show_grid_y
+
+  show_axis_lines <- plot_config$show_axis_lines
+
+  tickwidth <- plot_config$tickwidth
+  ticklen   <- plot_config$ticklen
 
   fig     <- plot_ly()
   model_cnt <- 0
@@ -326,25 +476,48 @@ plotRefeynMassHist <- function(models,histogram_palette,plot_width, plot_height,
 
     model_cnt <- model_cnt + 1
 
-    dfMass <- get_df_mass(refeyn,FALSE,TRUE)
+    dfMass <- get_df_mass(refeyn,contrasts,TRUE)
+
+    scale_factor <- ifelse(contrasts,cstFactorForContrast,1)
 
     fig <- fig %>% add_trace(type="histogram",
       x=dfMass$mass, color = I(histogram_palette[model_cnt]),
-      alpha = 0.4, xbins=list(size=refeyn$bin_width),
+      alpha = 0.4, xbins=list(size=refeyn$bin_width*scale_factor),
       showlegend=FALSE)
 
   }
 
-  y <- list(title = "Counts",titlefont = list(size = axis_size), 
-            tickfont = list(size = axis_size))
+  y <- list(
+    title = "Counts",
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    standoff = 30,
+    showgrid= show_grid_y,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
   
-  xtitle <- "Mass (kDa)"
+  xtitle <- ifelse(contrasts,"Contrast * 10³","Mass (kDa)")
 
-  x <- list(title = xtitle,titlefont = list(size = axis_size),
-            tickfont = list(size = axis_size))
+  x <- list(
+    title = xtitle,
+    titlefont = list(size = axis_size),
+    tickfont = list(size = axis_size),
+    showgrid = show_grid_x,
+    zeroline = FALSE,
+    showline = show_axis_lines,
+    automargin = TRUE,
+    ticks = "outside",
+    tickwidth = tickwidth,
+    ticklen = ticklen
+  )
   
   fig <- fig %>% layout(xaxis = x, yaxis = y,showlegend = TRUE,
-                        font="Roboto",legend = list(font = list(size = axis_size)))
+                        font="Roboto",legend = list(font = list(size = legend_font_size)))
 
   fig <- fig %>% layout(barmode = "overlay")
 

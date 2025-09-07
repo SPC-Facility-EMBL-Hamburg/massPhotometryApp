@@ -1,6 +1,6 @@
 # The PhotoMol app
 
-Last time updated: July 2025
+Last time updated: September 2025
 
 ## Introduction
 
@@ -10,6 +10,13 @@ The fitting is done using a multi-gaussian model with a user defined number of g
 The input data for PhotoMol is the distribution of events (counts versus masses) and the output data 
 are the estimated peaks and widths of the gaussians. Contrasts can be converted to masses by loading a second MP experiment 
 with known species. Example data is available when running the app.
+
+## What's new
+
+PhotoMol v2.0  
+- allows importing multiple MP files, both for the analysis and for the calibration.
+- allows fitting a baseline to correct for background noise.
+- provides improved plotting features.
 
 ## Getting started
 

@@ -2,20 +2,19 @@ options(shiny.maxRequestSize=30*1024^2)
 options(stringsAsFactors = F)
 
 source("server_files/helpers.R")
-source_python("refeyn.py")
-source_python("refeynCalibration.py")
-source_python("helpers.py")
 source("server_files/plot_functions.R")
-### End of variables to change
+
+# Import the Python package
+pyphotomol <- import("pyphotomol")
 
 function(input, output, session) {
 
-  refeynCalib <- RefeynCalib()
-
-  photoMolModels <- PhotoMolModels()
+  photoMolModels <- pyphotomol$MPAnalyzer()
+  pmCalibration  <- pyphotomol$MPAnalyzer()
 
   source(paste0(base_dir,"reactives/reactives.R"           ), local = T)
   source(paste0(base_dir,"reactives/reactivesCalibration.R"), local = T)
+  source(paste0(base_dir,"reactives/reactives_plot_configure.R" ), local = T)
   source(paste0(base_dir,"reactives/download_reactives.R"  ), local = T)
 
 }

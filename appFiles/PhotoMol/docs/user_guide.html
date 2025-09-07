@@ -64,13 +64,18 @@ $$
 $$
 
     <p class="vf-intro__text">where \( n \) is the number of one-side (of lower tail) truncated Gaussians \( g_i() \), and 
-    baseline is defined by the user. The parameter 'Minimum observed mass' (kDa) can be used to set the limit for the truncated gaussians. We recommend to use 30 kDa, but this value depends on the instrument.</p>
+    baseline can be zero or fitted. The parameter 'Minimum observed mass' (kDa) can be used to set the limit for the truncated gaussians. We recommend to use 30 kDa, but this value depends on the instrument.</p>
 
-    <p class="vf-intro__text">For quality check purposes, unbinding events (negative masses) can also be fitted by changing the range of analysis. Peaks that have a similar number of counts in both the binding and unbinding regions are indicative of artifacts.
+    <p class="vf-intro__text">
+        For quality check purposes, unbinding events (negative masses)
+        can also be fitted by changing 1) the window range of analysis, and
+        2) the 'Min. observed mass' parameter to a negative value (e.g., -1e6).
+        Peaks that have a similar number of counts in both the binding
+        and unbinding regions are indicative of artifacts.
 </p>
 
     <p class="vf-intro__text">The fitted means and standard deviations are shown in the 'Fitted parameters and counts' Table using as column names
-    'Position / kDa' and 'Sigma / kDa', respectively. The number of counts (and percentage from total) under each fitted gaussian is also presented.
+    'μ̂ / kDa' and 'σ̂ / kDa', respectively. The number of counts (and percentage from total) under each fitted gaussian is also shown.
     </p>
 
 

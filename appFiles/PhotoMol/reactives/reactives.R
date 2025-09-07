@@ -1,47 +1,127 @@
 reactives <- reactiveValues(
     data_loaded=FALSE,
     data_loadedCalibration=FALSE,
-    calibrationMethod="calibrationFile",
-    calibration_data_fitted=FALSE,
-    nFiles=0)
+    masses_available=FALSE,
+    legends_config=list(
+      legends = NULL,
+      colors  = NULL,
+      sels    = NULL,
+      leg_sels= NULL
+    ),
+    legends_hist=NULL,
+    color_hist=NULL,
 
-output$nFiles <- reactive({reactives$nFiles})
-outputOptions(output, "nFiles", suspendWhenHidden = FALSE)
+    legends_config_calib=list(
+      legends = NULL,
+      colors  = NULL,
+      sels    = NULL,
+      leg_sels= NULL
+    ),
+
+    legends_hist_calib=NULL,
+    color_hist_calib=NULL,
+
+    selected_color='#1f77b4',
+    selected_color_calib='#1f77b4',
+
+    plot_config=list(
+      width=14,
+      height=12,
+      type="png",
+      axis_size=15,
+      legend_font_size=14,
+      addMassesToLegend=FALSE,
+      addPercentageToLegend=FALSE,
+      add_labels=TRUE,
+      add_percentages=TRUE,
+      show_grid_x = TRUE,
+      show_grid_y = TRUE,
+      show_axis_lines = TRUE,
+      tickwidth = 2,
+      ticklen = 8,
+      linewidth=3
+    )
+)
+
+create_hist_legend_df <- function() {
+
+  legendDfHist <- data.frame(
+    'Legend' = names(photoMolModels$models),
+    'Color'  = rep('#1f77b4',length(photoMolModels$models))
+  )
+
+  color_cellsHist <- data.frame(col=2,row=1:nrow(legendDfHist))
+
+  output$legendInfoHist <- renderRHandsontable({
+    rhandsontable(
+      legendDfHist,
+      rowHeaders=NULL,
+      col_highlight = color_cellsHist$col - 1,
+      row_highlight = color_cellsHist$row - 1
+  ) %>%
+      hot_col(col = c(1,2),renderer = myrenderer) %>%
+      hot_col(col = 1, width = 150,readOnly = TRUE)
+  })
+
+  reactives$legends_hist <- legendDfHist[,1]
+  reactives$color_hist   <- legendDfHist[,2]
+}
 
 updateInputBox <- function(){
 
+  create_hist_legend_df()
+
   hist_counts <- photoMolModels$get_properties('hist_counts')
-  hist_mass   <- photoMolModels$get_properties('hist_mass')
+  hist_mass   <- photoMolModels$get_properties('histogram_centers')
 
   limits <- lapply(1:length(hist_counts),function(i) get_mass_limits(hist_counts[[i]],hist_mass[[i]]))
 
   minValue <- min(unlist(limits))
-  maxValue <- max(unlist(limits))
+  maxValue <- max(unlist(limits))*1.2
 
   updateSliderInput(session,"window_range",NULL,min = minValue,
-                    max = maxValue*1.05,value = c(0,maxValue),step = 5)
+                    max = maxValue,value = c(0,maxValue),step = 5)
 
   updateNumericInput(session,"leftLimitWindowRange",
                      value = minValue, min = -1e12, max = 0, step = 1)
+
   updateNumericInput(session,"rightLimitWindowRange",
                      value = maxValue, min = 0, max = 1e12, step = 1)
 
-  pks_initial <- photoMolModels$get_properties('pks_initial')
+  pks_initial <- photoMolModels$get_properties('peaks_guess')
+
+  # Start two empty vectors, one will have the file names, the other the peaks guess
+  peaks_guess_as_str <- c()
 
   for (i in 1:length(pks_initial)) {
 
-    if (length(pks_initial[[i]]) > 0) {
-        updateTextInput(session, paste0("starting_values",i), value = paste(pks_initial[[i]],collapse=" "))
+    peaks <- pks_initial[[i]]
+
+    if (length(peaks) > 0) {
+
+      peaks <- as.integer(peaks)
+      peaks <- paste(peaks,collapse=" ")
+      peaks_guess_as_str <- c(peaks_guess_as_str,peaks)
+
+    } else {
+
+      peaks_guess_as_str <- c(peaks_guess_as_str,"")
+
     }
 
   }
 
-  if (max(unlist(pks_initial)) > 500) {
+  df <- data.frame(
+    'File' = names(photoMolModels$models),
+    'Initial peak guesses (kDa)' = peaks_guess_as_str,
+    check.names = FALSE
+  )
 
-    updateSliderInput(session,"upper_limit_std",NULL,min = 5, max = 300,value = 200)
-    updateSliderInput(session,"position_tolerance",NULL,min = 1, max = 300,value = 200)
-
-  }
+  output$initialPeakGuessesTable <- renderRHandsontable({
+    rhandsontable(df,rowHeaders=NULL) %>%
+        hot_col(col = 1, readOnly = TRUE) %>%
+        hot_rows(rowHeights = 30)
+  })
 
 }
 
@@ -49,21 +129,36 @@ updateInputBox <- function(){
 observeEvent(input$GoLoadExample,{
   
   reactives$data_loaded <- FALSE
+  resetPlotsAndTables()
 
-  photoMolModels$load_models("example","www/demo.h5")
+  photoMolModels$models <- dict()
+  photoMolModels$import_files("www/demo.h5","example")
+  photoMolModels$apply_to_all('count_binding_events')
+
+  photoMolModels$apply_to_all(
+    'create_histogram',
+    window=c(0,800),
+    bin_width=input$bin_width
+  )
+
+  photoMolModels$apply_to_all(
+    'guess_peaks',
+    min_height=14,
+    min_distance=4,
+    prominence=8
+  )
+
   updateInputBox()
+  reactives$masses_available <- TRUE
   reactives$data_loaded <- TRUE
-  Sys.sleep(1)
 })
 
 resetPlotsAndTables <- function() {
 
   output$counts_plot           <- NULL
-  output$binding_plot          <- NULL
   output$counts_plotNormalized <- NULL
   output$fittedParams          <- NULL
   output$legendInfo            <- NULL
-  output$legendInfoHist       <- NULL
   output$countPlot             <- NULL
 
   output$counts_plot_stacked           <- NULL
@@ -73,44 +168,79 @@ resetPlotsAndTables <- function() {
 
 }
 
+output$binding_plot <- renderPlotly({
+
+  req(reactives$data_loaded)
+
+  return(
+    plotRefeynMassHist(
+      photoMolModels$models,
+      reactives$color_hist,
+      reactives$plot_config
+    ))
+})
+
 observeEvent(input$massPhotometryFile,{
   
   req(input$massPhotometryFile)
 
   resetPlotsAndTables()
 
-  updateCheckboxInput(session,"automaticFit",value = FALSE)
-
-  for (i in 1:8) updateTextInput(session, paste0("starting_values",i), value = '')
-
   reactives$data_loaded <- FALSE
 
-  if (length(input$massPhotometryFile$name) > 8) {
-    shinyalert(title="Please select a maximum of 8 files.", type = "warning")
-    return(NULL)
+  photoMolModels$models <- dict()
+
+  photoMolModels$import_files(input$massPhotometryFile$datapath,input$massPhotometryFile$name)
+
+  # Check if contrasts are available
+  contrasts <- unlist(photoMolModels$get_properties('contrasts'))
+
+  # Remove NA values from contrasts
+  contrasts <- contrasts[!is.na(contrasts)]
+
+  # Verif we have some values
+  allContrastsLoaded <- length(contrasts) > 100
+
+  masses <- unlist(photoMolModels$get_properties('masses'))
+
+  # Remove NA values from masses
+  masses <- masses[!is.na(masses)]
+
+  # Verify that are no NA values in masses
+  allMassesLoaded <- length(masses) > 100
+
+  reactives$masses_available <- allMassesLoaded
+
+  # If contrasts are available, but masses are not, show a warning
+  # We can still get masses if the user does the calibration
+  if (allContrastsLoaded & !allMassesLoaded) {
+    shinyalert(
+      title="Contrasts were found in the input file(s), but masses were not.
+      Please activate the calibration and use the intercept and slope to convert
+      from contrasts to masses.", type = "warning"
+    )
   }
 
-  withBusyIndicatorServer("Go",{
+  if (allMassesLoaded) {
 
-    photoMolModels$load_models(input$massPhotometryFile$name,input$massPhotometryFile$datapath)
+    photoMolModels$apply_to_all(
+      'create_histogram',
+      window=c(0,max(masses)*1.2),
+      bin_width=input$bin_width
+    )
 
-    if (photoMolModels$allMassesLoaded) {
+    photoMolModels$apply_to_all(
+      'guess_peaks',
+      min_height=14,
+      min_distance=4,
+      prominence=8
+    )
 
-      updateInputBox()
-      reactives$nFiles      <- length(photoMolModels$models)
-      reactives$data_loaded <- TRUE
-    } else  {
-      shinyalert(title="Masses were not found in the input file(s).
-                 Please do the calibration and use the fitted intercept and slope to convert 
-                 from contrasts to masses.", type = "warning")
-    }
-    
-    Sys.sleep(0.5)
-    
-  })
-  updateCheckboxInput(session,"automaticFit",value = TRUE)
+    updateInputBox()
+    reactives$data_loaded <- TRUE
+  }
 
-  axisSize <- floor(18 + ((12 - 18) / (8 - 1)) * (reactives$nFiles - 1))
+  axisSize <- floor(18 + ((12 - 18) / (8 - 1)) * (length(photoMolModels$models) - 1))
 
   updateNumericInput(session,'plot_axis_size',value = axisSize)
 
@@ -126,6 +256,28 @@ observeEvent(list(input$leftLimitWindowRange,input$rightLimitWindowRange),{
                     step = 1)
 })
 
+observeEvent(input$legendInfo,{
+
+  req(input$legendInfo)
+  legendInfo <- hot_to_r(input$legendInfo)
+
+  reactives$legends_config$legends <- legendInfo[,1]
+  reactives$legends_config$colors  <- legendInfo[,2]
+  reactives$legends_config$sels    <- legendInfo[,3]
+  reactives$legends_config$leg_sels <- legendInfo[,4]
+
+})
+
+observeEvent(input$legendInfoHist,{
+
+  req(input$legendInfoHist)
+  legendInfo <- hot_to_r(input$legendInfoHist)
+
+  reactives$legends_hist <- legendInfo[,1]
+  reactives$color_hist <- legendInfo[,2]
+
+})
+
 createPlotsAndTables <- function() {
 
   lower_limit_histogram <- input$window_range[1]
@@ -137,121 +289,152 @@ createPlotsAndTables <- function() {
   fit_tables <- list()
 
   i     <- 0
-  cnt1  <- 0
-  cnt2  <- 0
-
-  legends_all     <- c()
 
   models <- photoMolModels$models
 
   gaussiam_sum_idx <- c()
 
+  legends_count <- 0
+
+  df_peak_guess <- hot_to_r(input$initialPeakGuessesTable)
+
   for (model in models) {
 
     i <- i + 1
 
-    model$create_histo(window=window,bin_width=input$bin_width)
+    model$create_histogram(
+      window=window,
+      bin_width=input$bin_width
+    )
 
-    starting_values <- get_guess_positions(input[[paste0("starting_values",i)]])
+    starting_values <- get_guess_positions(df_peak_guess[i,2])
+
+    if (any(starting_values < input$min_observed_mass)) {
+      shinyalert(
+        title=paste0(
+          "Some initial peak guesses are below the minimum observed
+           mass (",input$min_observed_mass," kDa) and will be ignored."),
+        type = "warning")
+    }
+
     starting_values <- starting_values[starting_values > input$min_observed_mass]
 
     if (length(starting_values) == 0) {
-      model$fit <- NULL
+      model$fitted_data <- NULL
       next
     }
 
-    model$fit_histo(guess_pos=starting_values,tol=input$position_tolerance,
-                    max_std=input$upper_limit_std,
-                    min_observed_mass=input$min_observed_mass,
-                    baseline=input$baseline)
+    # Extract histogram centers to limit the mean and std tolerances
+    histogram_centers <- model$histogram_centers
+    mean_tolerance <- max(histogram_centers) - min(histogram_centers)
+    std_tolerance  <- abs(max(histogram_centers)) / 3
 
+    result <- tryCatch(
+      {
 
-    Sys.sleep(0.1)
+        model$fit_histogram(
+          peaks_guess=np_array(starting_values),
+          mean_tolerance=mean_tolerance,
+          std_tolerance=std_tolerance,
+          threshold=input$min_observed_mass,
+          fit_baseline=input$fit_baseline
+        )
+
+      }, error = function(e) {
+        if (inherits(e, "python.builtin.RuntimeError")) {
+          err <- py_last_error()
+          shinyalert(
+            paste0("⚠ Fitting error: ", err$value),
+            type = 'error'
+          )
+          return('Error')
+        } else {
+          stop(e) # rethrow non-Python errors
+        }
+      }
+    )
+
+    if (!is.null(result)) return(NULL)
 
     table  <- as.data.frame(model$fit_table)
 
-    legends <- paste0("Peak #",cnt2+1:length(starting_values))
+    if (length(models) > 1) table$File <- names(models)[i]
 
-    if (length(legends) > 1) {
-      legends <- c(paste0("Gaussian sum (",i,")"),legends)
-      gaussiam_sum_idx <- c(gaussiam_sum_idx,1+length(legends_all))
-    }
+    if (nrow(table) > 0)  {
 
-    cnt2         <- cnt2 + length(starting_values)
-    legends_all  <- c(legends_all,legends)
+      have_two_or_more_peaks <- nrow(table) > 1
 
-    if (length(models) >1) table$File <- model$name
+      if (have_two_or_more_peaks) {
 
-    if (nrow(table) > 0) {
-      cnt1 <- cnt1 + 1
-      fit_tables[[cnt1]] <- table
+        gaussiam_sum_idx <- c(gaussiam_sum_idx,1+legends_count)
+
+      }
+
+      fit_tables[[length(fit_tables)+1]] <- table
+
+      legends_count <- legends_count + nrow(table) + have_two_or_more_peaks
+
     }
 
   }
 
-  numberOfLegends <- length(legends_all)
-
-  if (numberOfLegends == 0) {
-    legendDf <- data.frame(legends = 'No fits',color = 'NA',select = FALSE)
-    color_cells <- data.frame(col=2,row=1)
-  } else {
-    colorPalette <- colorPalette9
-    if(numberOfLegends >= 10) colorPalette <- colorPalette12
-    if(numberOfLegends >= 13) colorPalette <- colorPalette40
-
-    legendDf <- data.frame(
-      legends = legends_all,color=colorPalette[1:numberOfLegends],
-      select  = as.logical(rep(TRUE,numberOfLegends)))
-
-    color_cells <- data.frame(col=2,row=1:numberOfLegends)
+  if (length(fit_tables) == 0) {
+    return(NULL)
   }
 
-  output$legendInfo <- renderRHandsontable({rhandsontable(legendDf,rowHeaders=NULL,colHeaders=NULL,
-                                                          col_highlight = color_cells$col - 1,
-                                                          row_highlight = color_cells$row - 1
+  legends <- photoMolModels$create_plotting_config()
+  legendDf <- legends[[1]]
+
+  legendDf <- set_column_names_legend_df(legendDf)
+
+  color_cells <- data.frame(col=2,row=1:nrow(legendDf))
+
+  output$legendInfo <- renderRHandsontable({
+    rhandsontable(legendDf,
+                  rowHeaders=NULL,
+                  col_highlight = color_cells$col - 1,
+                  row_highlight = color_cells$row - 1
   ) %>% hot_col(col = c(1,2),
                 renderer = myrenderer) %>%
-      hot_col(col = c(3),
+      hot_col(col = c(3,4),
               renderer = myrendererBoolean) %>% 
       hot_col(col = 1, width = 150)})
 
-  legendsHist <- names(photoMolModels$models)
-  
-  legendDfHist <- data.frame(
-    legends = legendsHist,
-    color   = histogram_palette[1:length(legendsHist)])
-  
-  color_cellsHist <- data.frame(col=2,row=1:nrow(legendDfHist))
-  
-  output$legendInfoHist <- renderRHandsontable({
-    rhandsontable(legendDfHist,rowHeaders=NULL,colHeaders=NULL,
-                  col_highlight = color_cellsHist$col - 1,
-                  row_highlight = color_cellsHist$row - 1
-  ) %>% 
-      hot_col(col = c(1,2),renderer = myrenderer) %>%
-      hot_col(col = 1, width = 150,readOnly = TRUE)})  
+  reactives$legends_config$legends <- legendDf[,1]
+  reactives$legends_config$colors  <- legendDf[,2]
+  reactives$legends_config$sels    <- as.logical(legendDf[,3])
+  reactives$legends_config$leg_sels <- as.logical(legendDf[,4])
 
   if (length(fit_tables) > 0) {
 
     fit_table <- do.call(rbind,fit_tables)
     # Render without the amplitude column
     output$fittedParams <- renderTable({
-                            req(input$legendInfo)
 
-                            # Remove the 'Amplitudes' column
-                            df <- fit_table[,-5]
+      # Remove the 'Amplitudes' column
+      df <- fit_table[,-5]
 
-                            # Obtain the peak legends
-                            legends <- get_legend_from_rhandTable(input$legendInfo)
+      # Obtain the peak legends
+      legends <- reactives$legends_config$legends
 
-                            if (length(gaussiam_sum_idx) > 0) {
-                              df$Legend <- legends[-gaussiam_sum_idx]
-                            } else {
-                              df$Legend <- legends
-                            }
+      if (length(gaussiam_sum_idx) > 0) {
+        df$Legend <- legends[-gaussiam_sum_idx]
+      } else {
+        df$Legend <- legends
+      }
 
-                            return(df)
-                            },digits = 0)
+      # Set shorter column names for the UI
+      colnames(df)[1] <- "μ̂ / kDa"
+      colnames(df)[2] <- "σ̂ / kDa"
+
+      colnames(df)[5] <- "μ̂ error / %"
+      colnames(df)[6] <- "σ̂ error / %"
+
+      # Remove the column numbr 7 - amplitude error
+      df <- df[,-7]
+
+      return(df)
+      },digits = 0)
 
   } else {
 
@@ -260,215 +443,91 @@ createPlotsAndTables <- function() {
   }
 
   output$counts_plot <- renderPlotly({
-
-    req(photoMolModels$allMassesLoaded)
-    req(input$legendInfo)
-    req(input$legendInfoHist)
     
-    legends <- isolate(get_legend_from_rhandTable(input$legendInfo))
-    colors  <- isolate(get_colors_from_rhandTable(input$legendInfo))
-    sels    <- isolate(get_sel_from_rhandTable(input$legendInfo))
+    plot <-   plotRefeynFit(
+      photoMolModels$models,
+      reactives$plot_config,
+      reactives$legends_config,
+      reactives$color_hist,
+      contrasts = FALSE,
+      normalize = FALSE,
+      stacked = FALSE
+    )
 
-    colorsHist  <- isolate(get_colors_from_rhandTable(input$legendInfoHist))    
-    
-    plot <-   plotRefeynFit(photoMolModels$models,input$baseline,input$plot_width, input$plot_height,
-                            input$plot_type, input$plot_axis_size,legends,colors,sels,
-                            colorsHist,
-                            input$show_massesLegend,input$show_percentageLegend,FALSE,FALSE,
-                            input$show_massesPlot,input$show_percentagePlot)
+    if (input$runSimulation) {
+      plot <- addSimulation2plotRefeynFit(
+        plot,input$positionSimulate,input$stdSimulate,
+        input$amplitudeSimulate,input$leftLimitSimulate
+      )
+    }
 
-    if (input$runSimulation) plot <- addSimulation2plotRefeynFit(
-      plot,input$positionSimulate,input$stdSimulate,input$amplitudeSimulate,input$leftLimitSimulate)
+    return(plot)
 
-    return(plot)})
+  })
 
   output$counts_plot_stacked <- renderPlotly({
 
-    req(photoMolModels$allMassesLoaded)
-    req(input$legendInfo)
-    req(input$legendInfoHist)
-    
-    legends <- isolate(get_legend_from_rhandTable(input$legendInfo))
-    colors  <- isolate(get_colors_from_rhandTable(input$legendInfo))
-    sels    <- isolate(get_sel_from_rhandTable(input$legendInfo))
+    plot <-   plotRefeynFit(
+      photoMolModels$models,
+      reactives$plot_config,
+      reactives$legends_config,
+      reactives$color_hist,
+      contrasts = FALSE,
+      normalize = FALSE,
+      stacked = TRUE
+    )
 
-    colorsHist  <- isolate(get_colors_from_rhandTable(input$legendInfoHist))
-    
-    plot <-   plotRefeynFit(photoMolModels$models,input$baseline,input$plot_width, input$plot_height,
-                            input$plot_type, input$plot_axis_size,legends,colors,sels,
-                            colorsHist,
-                            input$show_massesLegend,input$show_percentageLegend,FALSE,FALSE,
-                            input$show_massesPlot,input$show_percentagePlot,TRUE)
-
-    if (input$runSimulation) plot <- addSimulation2plotRefeynFit(
-      plot,input$positionSimulate,input$stdSimulate,input$amplitudeSimulate,input$leftLimitSimulate)
+    if (input$runSimulation) {
+      plot <- addSimulation2plotRefeynFit(
+        plot,input$positionSimulate,input$stdSimulate,
+        input$amplitudeSimulate,input$leftLimitSimulate
+      )
+    }
 
     return(plot)})
 
   output$counts_plotNormalized <- renderPlotly({
-
-    req(photoMolModels$allMassesLoaded)
-    req(input$legendInfo)
-    req(input$legendInfoHist)
     
-    legends <- isolate(get_legend_from_rhandTable(input$legendInfo))
-    colors  <- isolate(get_colors_from_rhandTable(input$legendInfo))
-    sels    <- isolate(get_sel_from_rhandTable(input$legendInfo))
-
-    colorsHist  <- isolate(get_colors_from_rhandTable(input$legendInfoHist))
-    
-    plot <-   plotRefeynFit(photoMolModels$models,input$baseline,input$plot_width, input$plot_height,
-                            input$plot_type, input$plot_axis_size,legends,colors,sels,
-                            colorsHist,
-                            input$show_massesLegend,input$show_percentageLegend,FALSE,TRUE,
-                            input$show_massesPlot,input$show_percentagePlot)
+    plot <-   plotRefeynFit(
+      photoMolModels$models,
+      reactives$plot_config,
+      reactives$legends_config,
+      reactives$color_hist,
+      contrasts = FALSE,
+      normalize = TRUE,
+      stacked = FALSE
+    )
 
     return(plot)})
 
   output$counts_plotNormalized_stacked <- renderPlotly({
-
-    req(photoMolModels$allMassesLoaded)
-    req(input$legendInfo)
-    req(input$legendInfoHist)
-
-    legends <- isolate(get_legend_from_rhandTable(input$legendInfo))
-    colors  <- isolate(get_colors_from_rhandTable(input$legendInfo))
-    sels    <- isolate(get_sel_from_rhandTable(input$legendInfo))
-
-    colorsHist  <- isolate(get_colors_from_rhandTable(input$legendInfoHist))    
     
-    plot <-   plotRefeynFit(photoMolModels$models,input$baseline,input$plot_width, input$plot_height,
-                            input$plot_type, input$plot_axis_size,legends,colors,sels,
-                            colorsHist,
-                            input$show_massesLegend,input$show_percentageLegend,FALSE,TRUE,
-                            input$show_massesPlot,input$show_percentagePlot,TRUE)
+    plot <-   plotRefeynFit(
+      photoMolModels$models,
+      reactives$plot_config,
+      reactives$legends_config,
+      reactives$color_hist,
+      contrasts = FALSE,
+      normalize = TRUE,
+      stacked = TRUE
+    )
 
-    return(plot)})
-
-  output$binding_plot <- renderPlotly({
-
-  req(input$legendInfoHist)
-  colorsHist  <- isolate(get_colors_from_rhandTable(input$legendInfoHist))
-
-  # see server_files/plot_functions.R
-  return(plotRefeynMassHist(
-    photoMolModels$models,colorsHist,input$plot_width, input$plot_height,
-    input$plot_type, input$plot_axis_size))
+    return(plot)
   })
 
   return(NULL)
 
 }
 
-observeEvent(list(
-    input$starting_values1,
-    input$starting_values2,
-    input$starting_values3,
-    input$starting_values4,
-    input$starting_values5,
-    input$starting_values6,
-    input$starting_values7,
-    input$starting_values8,
-    input$window_range[1],input$window_range[2],
-    input$bin_width,input$upper_limit_std,input$position_tolerance,
-    input$baseline,input$min_observed_mass,
-    input$automaticFit
-    ),{
+observeEvent(input$run_fitting,{
 
-  req(input$automaticFit)
   req(reactives$data_loaded)
-  req(photoMolModels$allMassesLoaded)
+  req(reactives$masses_available)
 
   resetPlotsAndTables()
 
-  for (i in 1:8) {
-
-    pks_initial <- input[[paste0("starting_values",i)]]
-    pks_initial <- get_guess_positions(pks_initial)
-
-    if (length(pks_initial) == 0) {next}
-
-    pks_initial <- as.numeric(pks_initial)
-
-    rightLimit <- input$window_range[2]
-
-    if (any(pks_initial < rightLimit)) {
-      pks_initial <- as.numeric(pks_initial[pks_initial < rightLimit])
-      updateTextInput(session, paste0("starting_values",i), value = paste(pks_initial,collapse=" "))
-    }
-
-  }
-
   createPlotsAndTables()
 
+  updateTabsetPanel(session,"tabset_plots",selected = "Histogram (subplots)")
+
 })
-
-observeEvent(list(input$legendInfo,input$legendInfoHist),{
-  
-  req(reactives$data_loaded)
-  
-  legends <- isolate(get_legend_from_rhandTable(input$legendInfo))
-  mol     <- isolate(input$mol2changeColor)
-  
-  legendsH <- isolate(get_legend_from_rhandTable(input$legendInfoHist))
-
-  legends <- c(legends,legendsH)
-  
-  updateSelectInput(session,"mol2changeColor","Set colour",legends,mol)
-  
-})
-
-observeEvent(input$colorForLegend,{
-  
-  req(reactives$data_loaded)
-  isolate({
-    legends <- get_legend_from_rhandTable(input$legendInfo)
-    colors  <- get_colors_from_rhandTable(input$legendInfo)
-    sels    <- get_sel_from_rhandTable(input$legendInfo)
-    
-    if (input$mol2changeColor %in% legends) {
-      
-      idx <- which(legends == input$mol2changeColor)
-      
-      colors[idx] <- input$colorForLegend
-      
-      legendDf <- data.frame(legends = legends,color=colors,select = as.logical(sels))
-      
-      color_cells <- data.frame(col=2,row=1:length(colors))
-      output$legendInfo <- renderRHandsontable({rhandsontable(legendDf,rowHeaders=NULL,colHeaders=NULL,
-                                                              col_highlight = color_cells$col - 1,
-                                                              row_highlight = color_cells$row - 1
-      ) %>% hot_col(col = c(1,2),
-                    renderer = myrenderer) %>% 
-          hot_col(col = c(3),
-                  renderer = myrendererBoolean) %>% 
-          hot_col(col = 1, width = 150)})
-      
-    } else {
-      
-      legends <- get_legend_from_rhandTable(input$legendInfoHist)
-      colors  <- get_colors_from_rhandTable(input$legendInfoHist)
-    
-      idx <- which(legends == input$mol2changeColor)
-      
-      colors[idx] <- input$colorForLegend
-      
-      legendDf <- data.frame(legends = legends,color=colors)
-      
-      color_cells <- data.frame(col=2,row=1:length(colors))
-      output$legendInfoHist <- renderRHandsontable({rhandsontable(legendDf,rowHeaders=NULL,colHeaders=NULL,
-                                                              col_highlight = color_cells$col - 1,
-                                                              row_highlight = color_cells$row - 1
-      ) %>% hot_col(col = c(1,2),
-                    renderer = myrenderer) %>% 
-          hot_col(col = 1, width = 150,readOnly=TRUE)})  
-      
-    }
-    
-  })
-  
-})
-
-
-
-
