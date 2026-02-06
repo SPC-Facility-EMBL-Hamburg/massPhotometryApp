@@ -1,6 +1,6 @@
 output$download_input_params <- downloadHandler(
   filename = function() {
-    paste0("Fitting_Parameters_PhotoMol_",Sys.Date(),".csv")
+    paste0("fitting_parameters_PhotoMol_",Sys.Date(),".csv")
   },content = function(file) {
 
     req(reactives$masses_available)
@@ -38,7 +38,7 @@ output$download_input_params <- downloadHandler(
 )
 
 output$download_params_table <- downloadHandler(filename = function() {
-  paste0("Fitted_Parameters_PhotoMol_",Sys.Date(),".csv")
+  paste0("fitted_parameters_PhotoMol_",Sys.Date(),".csv")
   },content = function(file) {
 
   req(reactives$masses_available)
@@ -51,8 +51,8 @@ output$download_params_table <- downloadHandler(filename = function() {
   for (model in photoMolModels$models) {
 
     i <- i + 1
-
-    table  <- as.data.frame(model$fit_table)
+    py_table <- model$fit_table
+    table <- pandas_to_r(py_table)
 
     if (length(photoMolModels$models) >1) table$File <- names(models)[i]
 
@@ -74,7 +74,7 @@ output$download_params_table <- downloadHandler(filename = function() {
 })
 
 output$download_fitting_params_table_calibration <- downloadHandler(filename = function() {
-  paste0("Fitting_Parameters_Calibration_PhotoMol_",Sys.Date(),".csv")
+  paste0("fitting_parameters_calibration_PhotoMol_",Sys.Date(),".csv")
   },content = function(file) {
     
     parameter <- c(
@@ -88,6 +88,14 @@ output$download_fitting_params_table_calibration <- downloadHandler(filename = f
     )
 
     initialPeakGuessesTableCalib <- hot_to_r(input$initialPeakGuessesTableCalib)
+
+    # Add a first column with the file if not already present
+    if (ncol(initialPeakGuessesTableCalib) == 2) {
+        initialPeakGuessesTableCalib <- cbind(
+            "File"=names(pmCalibration$models),
+            initialPeakGuessesTableCalib
+        )
+    }
 
     for (row in 1:nrow(initialPeakGuessesTableCalib)) {
 
@@ -116,7 +124,7 @@ output$download_fitting_params_table_calibration <- downloadHandler(filename = f
   })
 
 output$download_params_table_calibration <- downloadHandler(filename = function() {
-  paste0("Fitted_Parameters_Calibration_PhotoMol_",Sys.Date(),".csv")
+  paste0("fitted_parameters_calibration_PhotoMol_",Sys.Date(),".csv")
   },content = function(file) {
     
   req(reactives$data_loadedCalibration)
@@ -130,7 +138,8 @@ output$download_params_table_calibration <- downloadHandler(filename = function(
 
     i <- i + 1
 
-    table  <- as.data.frame(model$fit_table)
+    py_table  <- model$fit_table
+    table <- pandas_to_r(py_table)
 
     if (length(pmCalibration$models) >1) table$File <- names(models)[i]
 
@@ -152,7 +161,7 @@ output$download_params_table_calibration <- downloadHandler(filename = function(
   })
 
 output$download_mass_histogram <- downloadHandler(filename = function() {
-  paste0("Mass_histogram_PhotoMol_",Sys.Date(),".csv")
+  paste0("mass_histogram_PhotoMol_",Sys.Date(),".csv")
 },content = function(file) {
   
   req(reactives$masses_available)
@@ -185,7 +194,7 @@ output$download_mass_histogram <- downloadHandler(filename = function() {
 
 
 output$download_fitted_gaussians <- downloadHandler(filename = function() {
-  paste0("Fitted_gaussians_PhotoMol_",Sys.Date(),".csv")
+  paste0("fitted_gaussians_PhotoMol_",Sys.Date(),".csv")
 },content = function(file) {
 
   req(reactives$masses_available)
@@ -257,7 +266,7 @@ output$download_fitted_gaussians <- downloadHandler(filename = function() {
 
 
 output$download_mass_histogramNormalised <- downloadHandler(filename = function() {
-  paste0("Mass_histogramNormalised_PhotoMol_",Sys.Date(),".csv")
+  paste0("mass_histogram_normalised_PhotoMol_",Sys.Date(),".csv")
 },content = function(file) {
   
   req(reactives$masses_available)
@@ -290,7 +299,7 @@ output$download_mass_histogramNormalised <- downloadHandler(filename = function(
 })
 
 output$download_fitted_gaussiansNormalised <- downloadHandler(filename = function() {
-  paste0("Fitted_gaussiansNormalised_PhotoMol_",Sys.Date(),".csv")
+  paste0("fitted_gaussians_normalised_PhotoMol_",Sys.Date(),".csv")
 },content = function(file) {
 
   req(reactives$masses_available)

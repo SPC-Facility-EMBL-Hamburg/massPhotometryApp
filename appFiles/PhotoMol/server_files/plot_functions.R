@@ -1,5 +1,3 @@
-
-
 configFig <- function(fig,plot_width, plot_height, plot_type,plot_title_for_download) {
  
   fig %>%  config(
@@ -266,7 +264,7 @@ plotRefeynFit <- function(
 
     if (stacked) {
         figs[[model_cnt]] <- add_mass_histogram(figs[[model_cnt]],dfMass,bin_info,normalize,color_hst)
-        figs[[model_cnt]] <- figs[[model_cnt]] %>% layout(xaxis = x, yaxis = y,showlegend = TRUE,font="Roboto",legend = list(font = list(size = axis_size)))
+        figs[[model_cnt]] <- figs[[model_cnt]] %>% layout(xaxis = x, yaxis = y,showlegend = TRUE,font="Roboto",legend = list(font = list(size = legend_font_size)))
 
     } else {
         fig <- add_mass_histogram(fig,dfMass,bin_info,normalize,color_hst)
@@ -290,17 +288,21 @@ plotRefeynFit <- function(
 
     if (sum(sels) == 0) next
 
+    fit_table <- refeyn$fit_table
+    # convert to R data frame
+    fit_table <- pandas_to_r(fit_table)
+
     if (stacked) {
 
       figs[[model_cnt]] <- add_gaussian_traces(
-        figs[[model_cnt]],axis_size,refeynFit,refeyn$fit_table,
+        figs[[model_cnt]],axis_size,refeynFit,fit_table,
         legends,colorPalette,sels,sels_leg,baseline,scaling_factor,
         addMassesToLegend,addPercentageToLegend,contrasts,
         add_labels,add_percentages,stacked,linewidth)
 
     } else {
       fig <- add_gaussian_traces(
-        fig,axis_size,refeynFit,refeyn$fit_table,
+        fig,axis_size,refeynFit,fit_table,
         legends,colorPalette,sels,sels_leg,baseline,
         scaling_factor,addMassesToLegend,addPercentageToLegend,contrasts,
         add_labels,add_percentages,stacked,linewidth)
@@ -375,6 +377,7 @@ plotMass_vs_contrast <- function(
   plot_height <- plot_config$height
   plot_type   <- plot_config$type
   axis_size   <- plot_config$axis_size
+  legend_font_size <- plot_config$legend_font_size
   linewidth   <- plot_config$linewidth
 
   show_grid_x <- plot_config$show_grid_x
@@ -385,7 +388,7 @@ plotMass_vs_contrast <- function(
   ticklen   <- plot_config$ticklen
   
   fig <- plot_ly()
-  
+
   df <- data.frame(mass,contrast)
 
   fig    <- fig %>% add_trace(
@@ -438,8 +441,8 @@ plotMass_vs_contrast <- function(
     xaxis = x, yaxis = y,
     showlegend = FALSE,
     font="Roboto",
-    legend = list(font = list(size = axis_size)))
-  
+    legend = list(font = list(size = legend_font_size)))
+
   fig <- configFig(
     fig,plot_width, plot_height, plot_type,
     paste0("calibrationMassVsContrast-",Sys.Date())

@@ -348,7 +348,8 @@ observeEvent(
 
     if (!is.null(result)) return(NULL)
 
-    table  <- as.data.frame(model$fit_table)
+    py_table <- model$fit_table
+    table <- pandas_to_r(py_table)
 
     if (length(models) > 1) table$File <- names(models)[i]
 
@@ -375,6 +376,13 @@ observeEvent(
   )
 
   legends <- pmCalibration$create_plotting_config()
+
+  # Convert to R dataframe
+  # legends[[1]] is used for the traces
+  legends[[1]] <- pandas_to_r(legends[[1]])
+  # legends[[2]] is used for the histograms
+  legends[[2]] <- pandas_to_r(legends[[2]])
+
   legendDf <- legends[[1]]
   legendDf <- set_column_names_legend_df(legendDf)
 
@@ -457,9 +465,11 @@ observeEvent(
   })
 
   calibration_dic <- pmCalibration$calibration_dic
-  contrasts <- py_to_r(calibration_dic[['exp_points']])
   slope <- calibration_dic[['fit_params']][1]
   intercept <- calibration_dic[['fit_params']][2]
+
+  # We need to_numpy for pandas version 3.0
+  contrasts <- calibration_dic[['exp_points']]$to_numpy()
 
   output$mass_vs_contrast <- renderPlotly({
 

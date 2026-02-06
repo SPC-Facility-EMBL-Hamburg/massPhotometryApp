@@ -356,7 +356,8 @@ createPlotsAndTables <- function() {
 
     if (!is.null(result)) return(NULL)
 
-    table  <- as.data.frame(model$fit_table)
+    py_table <- model$fit_table
+    table <- pandas_to_r(py_table)
 
     if (length(models) > 1) table$File <- names(models)[i]
 
@@ -383,6 +384,14 @@ createPlotsAndTables <- function() {
   }
 
   legends <- photoMolModels$create_plotting_config()
+
+  # Convert to R dataframe
+
+  # traces legends
+  legends[[1]] <- pandas_to_r(legends[[1]])
+  # histogram legends
+  legends[[2]] <- pandas_to_r(legends[[2]])
+
   legendDf <- legends[[1]]
 
   legendDf <- set_column_names_legend_df(legendDf)

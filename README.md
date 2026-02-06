@@ -1,6 +1,6 @@
 # The PhotoMol app
 
-Last time updated: September 2025
+Last time updated: February 2026
 
 ## Introduction
 
@@ -41,15 +41,8 @@ python3 -m venv /home/${user}/myenv
 /home/${user}/myenv/bin/pip install --prefer-binary --no-cache-dir -r ./appFiles/requirements.txt
 ```
 
-4) Set the correct path for the app
+4) Set the correct path for the app by changing the variable `base_dir` in `appFiles/PhotoMol/global.R`. 
 
-``` bash 
-if [ "$(basename "$(pwd)")" = "massPhotometryApp" ]; then
-    sed -i "0,/base_dir <- paste0/s|base_dir <- paste0.*|base_dir <- paste0('$PWD', '/appFiles/PhotoMol/')|" appFiles/PhotoMol/global.R
-else
-    echo "Change the working directory to massPhotometryApp"
-fi
-```
 
 5) Run PhotoMol
 
